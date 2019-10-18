@@ -3,7 +3,7 @@
 @author     Pere Tuset-Peiro  (peretuset@openmote.com)
 @version    v0.1
 @date       July, 2019
-@brief      
+@brief
 
 @copyright  Copyright 2019, OpenMote Technologies, S.L.
             This file is licensed under the GNU General Public License v2.
@@ -67,6 +67,7 @@ class MqttMultiplexer(threading.Thread):
         self.influxdb_password = config.influxdb_config['influxdb_password']
         self.influxdb_database = config.influxdb_config['influxdb_database']
         self.influxdb_measurements = config.influxdb_config['influxdb_measurements']
+        self.inflxdb_client = None
 
         # Calibration configuration
         self.use_calibration = config.calibration_config['use_calibration']
@@ -91,7 +92,8 @@ class MqttMultiplexer(threading.Thread):
         # Create MqttClient and InfluxDB client
         self.mqtt_client     = MqttClient.MqttClient(address=self.mqtt_address, port=self.mqtt_port)
         self.influxdb_client = InfluxDBClient(host=self.influxdb_address, port=self.influxdb_port, \
-                                              username=self.influxdb_user, password=self.influxdb_password)
+                                              username=self.influxdb_user, password=self.influxdb_password, \
+                                              database=self.influxdb_database)
 
         # Call thread start
         threading.Thread.start(self)
@@ -137,14 +139,16 @@ class MqttMultiplexer(threading.Thread):
                 if (payload is not None):
                     # Inject packet to InfluxDB
                     if self.influxdb_measurements["on_consolidate"]["store"] == True:
-                        result = self.influxdb_client.write_points(dataframe=payload, \
-                                                                   measurement=self.influxdb_measurements["on_consolidate"]["measurement"])
-                        if (not result):
+                        scratch = {"measurement": self.influxdb_measurements["on_consolidate"]["measurement"],
+                                   "fields"     : json.loads(payload)
+                                  }
+                        result = self.influxdb_client.write_points([scratch])
+                        if not result:
                             logger.error("run: Error adding to InfluxDB")
 
                     for mqtt_publish_topic in self.mqtt_publish_topics:
                         self.mqtt_client.send_message(topic=mqtt_publish_topic, message=payload)
-                    
+
 
             # Remove all keys that have expired
             for key in keys_expired:
@@ -175,9 +179,11 @@ class MqttMultiplexer(threading.Thread):
 
             # Inject packet to InfluxDB
             if self.influxdb_measurements["on_message"]["store"] == True:
-                result = self.influxdb_client.write_points(dataframe=payload, \
-                                                           measurement=self.influxdb_measurements["on_message"]["measurement"])
-                if (not result):
+                scratch = {"measurement": self.influxdb_measurements["on_message"]["measurement"],
+                           "fields": payload
+                          }
+                result = self.influxdb_client.write_points([scratch])
+                if not result:
                     logger.error("on_message: Error adding to InfluxDB")
 
             # If key exists in dictionary
@@ -203,9 +209,15 @@ class MqttMultiplexer(threading.Thread):
         # Convert packet to JSON
         message = json.loads(message)
 
+        # Ensure all integer data in message is converted to float
+        for k in message.keys():
+            if (type(message[k]) == int):
+                message[k] = float(message[k])
+
+        # Create message unique identifier
         t = message['node_id'].encode() + str(message['pkt_count']).encode()
 
-        # Calculate unique identifier
+        # Calculate message hash
         uid = hashlib.md5(t).hexdigest()
 
         # Return list
@@ -234,7 +246,7 @@ class MqttMultiplexer(threading.Thread):
                 output = self.__compensate_offset(message=output)
 
             # Convert payload to JSON string
-            payload = json.dumps(output)
+            payload = json.dumps(payload)
         else:
             payload = None
 
@@ -274,6 +286,6 @@ def main():
 
     # Stop the multiplexer
     multiplexer.stop()
-    
+
 if __name__ == "__main__":
     main()
