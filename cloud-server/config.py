@@ -3,7 +3,7 @@ mqtt_config = {
     "mqtt_address": "",
     "mqtt_port": ,
     "mqtt_subscribe_topics": [""],
-    "mqtt_publish_topic": ""
+    "mqtt_publish_topics": [""]
 }
 
 packet_config = {
@@ -17,4 +17,17 @@ calibration_config = {
 }
 
 calibration_values = {
+}
+
+influxdb_config = {
+  "influxdb_address": "",
+  "influxdb_port": ,
+  "influxdb_user": "",
+  "influxdb_password": "",
+  "influxdb_database": "",
+  "influxdb_measurements":
+    {
+      "on_message":     {"store": True, "measurement": ""}, 
+      "on_consolidate": {"store": True, "measurement": ""}
+    }
 }
